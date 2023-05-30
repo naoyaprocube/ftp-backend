@@ -1,5 +1,5 @@
 diff --git a/node_modules/ftpd/lib/FtpConnection.js b/node_modules/ftpd/lib/FtpConnection.js
-index 828e1a8..8d99622 100644
+index 828e1a8..67b3bb7 100644
 --- a/node_modules/ftpd/lib/FtpConnection.js
 +++ b/node_modules/ftpd/lib/FtpConnection.js
 @@ -7,6 +7,7 @@ var pathModule = require('path');
@@ -10,15 +10,16 @@ index 828e1a8..8d99622 100644
  
  var glob = require('./glob');
  var starttls = require('./starttls');
-@@ -17,6 +18,7 @@ var pathEscape = require('./helpers/pathEscape');
+@@ -17,6 +18,8 @@ var pathEscape = require('./helpers/pathEscape');
  var withCwd = require('./helpers/withCwd');
  var stripOptions = require('./helpers/stripOptions');
  var leftPad = require('./helpers/leftPad');
 +const FileModel = require('../../../models/File');
++const gridfs = require('mongoose-gridfs');
  
  var EventEmitter = events.EventEmitter;
  
-@@ -28,25 +30,25 @@ var REQUIRES_CONFIGURED_DATA = Constants.REQUIRES_CONFIGURED_DATA;
+@@ -28,25 +31,25 @@ var REQUIRES_CONFIGURED_DATA = Constants.REQUIRES_CONFIGURED_DATA;
  function FtpConnection(properties) {
    EventEmitter.call(this);
    var self = this;
@@ -48,7 +49,7 @@ index 828e1a8..8d99622 100644
    if (!socket || !socket.writable) {
      this._logIf(LOG.DEBUG, 'Attempted writing to a closed socket:\n>> ' + data.trim());
      return;
-@@ -55,11 +57,11 @@ FtpConnection.prototype._writeText = function(socket, data, callback) {
+@@ -55,11 +58,11 @@ FtpConnection.prototype._writeText = function(socket, data, callback) {
    return socket.write(data, 'utf8', callback);
  };
  
@@ -62,7 +63,7 @@ index 828e1a8..8d99622 100644
    if (this.dataSocket) {
      // TODO: should the second arg be false here?
      this._closeSocket(this.dataSocket, true);
-@@ -71,17 +73,17 @@ FtpConnection.prototype._closeDataConnections = function() {
+@@ -71,17 +74,17 @@ FtpConnection.prototype._closeDataConnections = function() {
    }
  };
  
@@ -83,7 +84,7 @@ index 828e1a8..8d99622 100644
          if (err) {
            self._logIf(LOG.ERROR, 'Error upgrading passive connection to TLS:' + util.inspect(err));
            self._closeSocket(psocket, true);
-@@ -125,16 +127,16 @@ FtpConnection.prototype._createPassiveServer = function() {
+@@ -125,16 +128,16 @@ FtpConnection.prototype._createPassiveServer = function() {
        self.dataSocket.on('close', allOver('close'));
        self.dataSocket.on('end', allOver('end'));
        function allOver(ename) {
@@ -104,7 +105,7 @@ index 828e1a8..8d99622 100644
          self._logIf(LOG.ERROR, 'Passive data event: error: ' + err);
          // TODO: Can we can rely on self.dataSocket having been closed?
          self.dataSocket = null;
-@@ -144,7 +146,7 @@ FtpConnection.prototype._createPassiveServer = function() {
+@@ -144,7 +147,7 @@ FtpConnection.prototype._createPassiveServer = function() {
    });
  };
  
@@ -113,7 +114,7 @@ index 828e1a8..8d99622 100644
    var self = this;
  
    if (self.dataListener) {
-@@ -155,7 +157,7 @@ FtpConnection.prototype._whenDataReady = function(callback) {
+@@ -155,7 +158,7 @@ FtpConnection.prototype._whenDataReady = function(callback) {
        callback(self.dataSocket);
      } else {
        self._logIf(LOG.DEBUG, 'Currently no data connection; expecting client to connect to pasv server shortly...');
@@ -122,7 +123,7 @@ index 828e1a8..8d99622 100644
          self._logIf(LOG.DEBUG, '...client has connected now');
          callback(self.dataSocket);
        });
-@@ -166,14 +168,14 @@ FtpConnection.prototype._whenDataReady = function(callback) {
+@@ -166,14 +169,14 @@ FtpConnection.prototype._whenDataReady = function(callback) {
        self._logIf(LOG.DEBUG, 'Using existing non-passive dataSocket');
        callback(self.dataSocket);
      } else {
@@ -139,7 +140,7 @@ index 828e1a8..8d99622 100644
    var self = this;
  
    if (self.dataSocket) {
-@@ -181,7 +183,7 @@ FtpConnection.prototype._initiateData = function(callback) {
+@@ -181,7 +184,7 @@ FtpConnection.prototype._initiateData = function(callback) {
    }
  
    var sock = net.connect(self.dataPort, self.dataHost || self.socket.remoteAddress);
@@ -148,7 +149,7 @@ index 828e1a8..8d99622 100644
      self.dataSocket = sock;
      callback(sock);
    });
-@@ -195,7 +197,7 @@ FtpConnection.prototype._initiateData = function(callback) {
+@@ -195,7 +198,7 @@ FtpConnection.prototype._initiateData = function(callback) {
      );
    }
  
@@ -157,7 +158,7 @@ index 828e1a8..8d99622 100644
      self._closeSocket(sock, true);
      self._logIf(LOG.ERROR, 'Data connection error: ' + util.inspect(err));
      self.dataSocket = null;
-@@ -203,16 +205,16 @@ FtpConnection.prototype._initiateData = function(callback) {
+@@ -203,16 +206,16 @@ FtpConnection.prototype._initiateData = function(callback) {
    });
  };
  
@@ -177,7 +178,7 @@ index 828e1a8..8d99622 100644
    // I feel like some of this might be redundant since we probably close some
    // of these sockets elsewhere, but it is fine to call _closeSocket more than
    // once.
-@@ -232,7 +234,7 @@ FtpConnection.prototype._onClose = function(hadError) {
+@@ -232,7 +235,7 @@ FtpConnection.prototype._onClose = function(hadError) {
    this._logIf(LOG.INFO, 'Client connection closed');
  };
  
@@ -186,7 +187,7 @@ index 828e1a8..8d99622 100644
    var self = this;
  
    if (self.hasQuit) {
-@@ -291,27 +293,27 @@ FtpConnection.prototype._onData = function(data) {
+@@ -291,27 +294,27 @@ FtpConnection.prototype._onData = function(data) {
  };
  
  // Specify the user's account (superfluous)
@@ -219,7 +220,7 @@ index 828e1a8..8d99622 100644
        if (err) {
          self._logIf(LOG.ERROR, 'Error upgrading connection to TLS: ' + util.inspect(err));
          self._closeSocket(self.socket, true);
-@@ -331,7 +333,7 @@ FtpConnection.prototype._command_AUTH = function(commandArg) {
+@@ -331,7 +334,7 @@ FtpConnection.prototype._command_AUTH = function(commandArg) {
        function switchToSecure() {
          self._logIf(LOG.INFO, 'Secure connection started');
          self.socket = cleartext;
@@ -228,16 +229,19 @@ index 828e1a8..8d99622 100644
            self._onData(data);
          });
          self.secure = true;
-@@ -341,7 +343,7 @@ FtpConnection.prototype._command_AUTH = function(commandArg) {
+@@ -341,20 +344,21 @@ FtpConnection.prototype._command_AUTH = function(commandArg) {
  };
  
  // Change working directory to parent directory
 -FtpConnection.prototype._command_CDUP = function() {
 +FtpConnection.prototype._command_CDUP = function () {
++  this.respond('550 Directory cannot change');
    var pathServer = pathModule.dirname(this.cwd);
    var pathEscaped = pathEscape(pathServer);
    this.cwd = pathServer;
-@@ -350,11 +352,11 @@ FtpConnection.prototype._command_CDUP = function() {
+-  this.respond('250 Directory changed to "' + pathEscaped + '"');
++  // this.respond('250 Directory changed to "' + pathEscaped + '"');
+   return this;
  };
  
  // Change working directory
@@ -251,22 +255,44 @@ index 828e1a8..8d99622 100644
      if (err) {
        this._logIf(LOG.ERROR, 'CWD ' + pathRequest + ': ' + err);
        this.respond('550 Directory not found.');
-@@ -369,11 +371,11 @@ FtpConnection.prototype._command_CWD = function(pathRequest) {
+@@ -369,39 +373,51 @@ FtpConnection.prototype._command_CWD = function(pathRequest) {
    return this;
  };
  
 -FtpConnection.prototype._command_DELE = function(commandArg) {
 +FtpConnection.prototype._command_DELE = function (commandArg) {
    var self = this;
- 
-   var filename = withCwd(self.cwd, commandArg);
+-
+-  var filename = withCwd(self.cwd, commandArg);
 -  self.fs.unlink(pathModule.join(self.root, filename), function(err) {
-+  self.fs.unlink(pathModule.join(self.root, filename), function (err) {
++  const Attachment = gridfs.createModel();
++  FileModel.find({ filename: commandArg }, (err, meta) => {
      if (err) {
-       self._logIf(LOG.ERROR, 'Error deleting file: ' + filename + ', ' + err);
-       // write error to socket
-@@ -384,24 +386,24 @@ FtpConnection.prototype._command_DELE = function(commandArg) {
-   });
+-      self._logIf(LOG.ERROR, 'Error deleting file: ' + filename + ', ' + err);
+-      // write error to socket
+-      self.respond('550 Permission denied');
++      self.respond("550 File not found")
+     } else {
+-      self.respond('250 File deleted');
++      Attachment.unlink(meta[0]._id, (error) => {
++        if (error) {
++          self.respond('550 Permission denied');
++        } else {
++          self.respond('250 File deleted');
++        }
++      });
+     }
+-  });
++  })
++  // self.fs.unlink(pathModule.join(self.root, filename), function (err) {
++  //   if (err) {
++  //     self._logIf(LOG.ERROR, 'Error deleting file: ' + filename + ', ' + err);
++  //     // write error to socket
++  //     self.respond('550 Permission denied');
++  //   } else {
++  //     self.respond('250 File deleted');
++  //   }
++  // });
  };
  
 -FtpConnection.prototype._command_FEAT = function() {
@@ -303,20 +329,35 @@ index 828e1a8..8d99622 100644
    // http://tools.ietf.org/html/rfc2389#section-4
    if (commandArg.toUpperCase() === 'UTF8 ON') {
      this.respond('200 OK');
-@@ -411,10 +413,10 @@ FtpConnection.prototype._command_OPTS = function(commandArg) {
+@@ -411,28 +427,36 @@ FtpConnection.prototype._command_OPTS = function(commandArg) {
  };
  
  // Print the file modification time
 -FtpConnection.prototype._command_MDTM = function(file) {
-+FtpConnection.prototype._command_MDTM = function (file) {
-   file = withCwd(this.cwd, file);
-   file = pathModule.join(this.root, file);
+-  file = withCwd(this.cwd, file);
+-  file = pathModule.join(this.root, file);
 -  this.fs.stat(file, function(err, stats) {
-+  this.fs.stat(file, function (err, stats) {
++FtpConnection.prototype._command_MDTM = function (file) {
++  console.log(file)
++  FileModel.find({ filename: file }, (err, meta) => {
      if (err) {
-       this.respond('550 File unavailable');
+-      this.respond('550 File unavailable');
++      self.respond("550 File not found")
      } else {
-@@ -424,15 +426,15 @@ FtpConnection.prototype._command_MDTM = function(file) {
+-      this.respond('213 ' + dateformat(stats.mtime, 'yyyymmddhhMMss'));
++      this.respond('213 ' + dateformat(meta[0].uploadDate, 'yyyymmddhhMMss'));
+     }
+-  }.bind(this));
++  })
++  // file = withCwd(this.cwd, file);
++  // file = pathModule.join(this.root, file);
++  // this.fs.stat(file, function (err, stats) {
++  //   if (err) {
++  //     this.respond('550 File unavailable');
++  //   } else {
++  //     this.respond('213 ' + dateformat(stats.mtime, 'yyyymmddhhMMss'));
++  //   }
++  // }.bind(this));
    return this;
  };
  
@@ -335,7 +376,7 @@ index 828e1a8..8d99622 100644
    if (commandArg) {
      this._LIST(commandArg, true/*detailed*/, 'STAT');
    } else {
-@@ -440,7 +442,7 @@ FtpConnection.prototype._command_STAT = function(commandArg) {
+@@ -440,7 +464,7 @@ FtpConnection.prototype._command_STAT = function(commandArg) {
    }
  };
  
@@ -344,7 +385,7 @@ index 828e1a8..8d99622 100644
    /*
     Normally the server responds with a mark using code 150. It then stops accepting new connections, attempts to send the contents of the directory over the data connection, and closes the data connection. Finally it
  
-@@ -460,15 +462,14 @@ FtpConnection.prototype._LIST = function(commandArg, detailed, cmd) {
+@@ -460,15 +484,14 @@ FtpConnection.prototype._LIST = function(commandArg, detailed, cmd) {
    var dir = withCwd(self.cwd, dirname);
  
    glob.setMaxStatsAtOnce(self.server.options.maxStatsAtOnce);
@@ -362,7 +403,7 @@ index 828e1a8..8d99622 100644
          if (file.name && file.name[0] !== '.') {
            return true;
          }
-@@ -504,8 +505,8 @@ FtpConnection.prototype._LIST = function(commandArg, detailed, cmd) {
+@@ -504,8 +527,8 @@ FtpConnection.prototype._LIST = function(commandArg, detailed, cmd) {
          return i === files.length + j ? finished() : null;
        }
  
@@ -373,7 +414,7 @@ index 828e1a8..8d99622 100644
            if (e1 || e2) {
              self._logIf(LOG.WARN, 'Error getting user/group name for file: ' + util.inspect(e1 || e2));
              fileInfos.push({
-@@ -531,7 +532,7 @@ FtpConnection.prototype._LIST = function(commandArg, detailed, cmd) {
+@@ -531,7 +554,7 @@ FtpConnection.prototype._LIST = function(commandArg, detailed, cmd) {
          if (self.server.options.filenameSortMap !== false) {
            var sm = (
              self.server.options.filenameSortMap ||
@@ -382,7 +423,7 @@ index 828e1a8..8d99622 100644
                return x.toUpperCase();
              }
            );
-@@ -541,10 +542,10 @@ FtpConnection.prototype._LIST = function(commandArg, detailed, cmd) {
+@@ -541,10 +564,10 @@ FtpConnection.prototype._LIST = function(commandArg, detailed, cmd) {
          }
  
          var sf = (self.server.options.filenameSortFunc ||
@@ -397,7 +438,7 @@ index 828e1a8..8d99622 100644
            if (self.server.options.filenameSortMap !== false) {
              return sf(x._s, y._s);
            } else if (detailed) {
-@@ -560,7 +561,7 @@ FtpConnection.prototype._LIST = function(commandArg, detailed, cmd) {
+@@ -560,7 +583,7 @@ FtpConnection.prototype._LIST = function(commandArg, detailed, cmd) {
    }, self.server.options.noWildcards);
  };
  
@@ -406,7 +447,7 @@ index 828e1a8..8d99622 100644
    var self = this;
  
    var m = '150 Here comes the directory listing';
-@@ -572,7 +573,7 @@ FtpConnection.prototype._listFiles = function(fileInfos, detailed, cmd) {
+@@ -572,7 +595,7 @@ FtpConnection.prototype._listFiles = function(fileInfos, detailed, cmd) {
      LIST: m, NLST: m, STAT: '213 End of status',
    };
  
@@ -415,7 +456,7 @@ index 828e1a8..8d99622 100644
      if (cmd === 'STAT') {
        whenReady(self.socket);
      } else {
-@@ -596,7 +597,6 @@ FtpConnection.prototype._listFiles = function(fileInfos, detailed, cmd) {
+@@ -596,7 +619,6 @@ FtpConnection.prototype._listFiles = function(fileInfos, detailed, cmd) {
        }
  
        self._logIf(LOG.DEBUG, 'Sending file list');
@@ -423,7 +464,7 @@ index 828e1a8..8d99622 100644
        for (var i = 0; i < fileInfos.length; ++i) {
          var fileInfo = fileInfos[i];
  
-@@ -609,15 +609,18 @@ FtpConnection.prototype._listFiles = function(fileInfos, detailed, cmd) {
+@@ -609,15 +631,18 @@ FtpConnection.prototype._listFiles = function(fileInfos, detailed, cmd) {
          } else {
            file = fileInfo.file;
            var s = file.stats;
@@ -444,7 +485,7 @@ index 828e1a8..8d99622 100644
            line += leftPad(dateformat(d, 'mmm dd HH:MM'), 12) + ' ';
            line += file.name;
            line += '\r\n';
-@@ -627,17 +630,18 @@ FtpConnection.prototype._listFiles = function(fileInfos, detailed, cmd) {
+@@ -627,42 +652,44 @@ FtpConnection.prototype._listFiles = function(fileInfos, detailed, cmd) {
            line,
            (i === fileInfos.length - 1 ? success : undefined)
          );
@@ -461,11 +502,23 @@ index 828e1a8..8d99622 100644
    var pathEscaped = pathEscape(pathServer);
    var pathFs = pathModule.join(this.root, pathServer);
 -  this.fs.mkdir(pathFs, 0755, function(err) {
-+  this.fs.mkdir(pathFs, 0755, function (err) {
-     if (err) {
-       this._logIf(LOG.ERROR, 'MKD ' + pathRequest + ': ' + err);
-       this.respond('550 "' + pathEscaped + '" directory NOT created');
-@@ -649,20 +653,20 @@ FtpConnection.prototype._command_MKD = function(pathRequest) {
+-    if (err) {
+-      this._logIf(LOG.ERROR, 'MKD ' + pathRequest + ': ' + err);
+-      this.respond('550 "' + pathEscaped + '" directory NOT created');
+-    } else {
+-      this.respond('257 "' + pathEscaped + '" directory created');
+-    }
+-  }.bind(this));
++  // this.fs.mkdir(pathFs, 0755, function (err) {
++  //   if (err) {
++  //     this._logIf(LOG.ERROR, 'MKD ' + pathRequest + ': ' + err);
++  //     this.respond('550 "' + pathEscaped + '" directory NOT created');
++  //   } else {
++  //     this.respond('257 "' + pathEscaped + '" directory created');
++  //   }
++  // }.bind(this));
++  this.respond('550 "' + pathEscaped + '" directory NOT created');
+   return this;
  };
  
  // Perform a no-op (used to keep-alive connection)
@@ -490,7 +543,7 @@ index 828e1a8..8d99622 100644
    var self = this;
    var m;
    var host;
-@@ -686,7 +690,7 @@ FtpConnection.prototype._PORT = function(commandArg, command) {
+@@ -686,7 +713,7 @@ FtpConnection.prototype._PORT = function(commandArg, command) {
      }
    } else { // EPRT
      if (commandArg.length >= 3 && commandArg.charAt(0) === '|' &&
@@ -499,7 +552,7 @@ index 828e1a8..8d99622 100644
        // Only IPv4 is supported.
        self.respond('522 Server cannot handle IPv6 EPRT commands, use (1)');
        return;
-@@ -720,15 +724,15 @@ FtpConnection.prototype._PORT = function(commandArg, command) {
+@@ -720,15 +747,15 @@ FtpConnection.prototype._PORT = function(commandArg, command) {
    self.respond('200 OK');
  };
  
@@ -518,7 +571,7 @@ index 828e1a8..8d99622 100644
    var self = this;
  
    self.dataConfigured = false;
-@@ -754,7 +758,7 @@ FtpConnection.prototype._PASV = function(commandArg, command) {
+@@ -754,7 +781,7 @@ FtpConnection.prototype._PASV = function(commandArg, command) {
    self.dataConfigured = true;
  };
  
@@ -527,7 +580,7 @@ index 828e1a8..8d99622 100644
    var self = this;
  
    var a = self.pasv.address();
-@@ -769,7 +773,7 @@ FtpConnection.prototype._writePASVReady = function(command) {
+@@ -769,7 +796,7 @@ FtpConnection.prototype._writePASVReady = function(command) {
    }
  };
  
@@ -536,7 +589,7 @@ index 828e1a8..8d99622 100644
    var self = this;
  
    var pasv = self._createPassiveServer();
-@@ -791,7 +795,7 @@ FtpConnection.prototype._setupNewPASV = function(commandArg, command) {
+@@ -791,7 +818,7 @@ FtpConnection.prototype._setupNewPASV = function(commandArg, command) {
      //     (iii) We run out of ports to try.
      var i = self.server.options.pasvPortRangeStart;
      pasv.listen(i);
@@ -545,7 +598,7 @@ index 828e1a8..8d99622 100644
        if (e.code === 'EADDRINUSE' && i < self.server.options.pasvPortRangeEnd) {
          pasv.listen(++i);
        } else {
-@@ -806,7 +810,7 @@ FtpConnection.prototype._setupNewPASV = function(commandArg, command) {
+@@ -806,7 +833,7 @@ FtpConnection.prototype._setupNewPASV = function(commandArg, command) {
    }
  
    // Once we're successfully listening, tell the client
@@ -554,7 +607,7 @@ index 828e1a8..8d99622 100644
      self.pasv = pasv;
  
      if (portRangeErrorHandler) {
-@@ -821,14 +825,14 @@ FtpConnection.prototype._setupNewPASV = function(commandArg, command) {
+@@ -821,14 +848,14 @@ FtpConnection.prototype._setupNewPASV = function(commandArg, command) {
      self._logIf(LOG.DEBUG, 'Passive data connection listening on port ' + port);
      self._writePASVReady(command);
    });
@@ -571,7 +624,7 @@ index 828e1a8..8d99622 100644
    var self = this;
  
    if (!self.server.options.tlsOptions) {
-@@ -851,7 +855,7 @@ FtpConnection.prototype._command_PBSZ = function(commandArg) {
+@@ -851,7 +878,7 @@ FtpConnection.prototype._command_PBSZ = function(commandArg) {
    }
  };
  
@@ -580,7 +633,7 @@ index 828e1a8..8d99622 100644
    var self = this;
  
    if (!self.server.options.tlsOptions) {
-@@ -871,7 +875,7 @@ FtpConnection.prototype._command_PROT = function(commandArg) {
+@@ -871,7 +898,7 @@ FtpConnection.prototype._command_PROT = function(commandArg) {
  };
  
  // Print the current working directory.
@@ -589,7 +642,7 @@ index 828e1a8..8d99622 100644
    var pathEscaped = pathEscape(this.cwd);
    if (commandArg === '') {
      this.respond('257 "' + pathEscaped + '" is current directory');
-@@ -881,11 +885,11 @@ FtpConnection.prototype._command_PWD = function(commandArg) {
+@@ -881,11 +908,11 @@ FtpConnection.prototype._command_PWD = function(commandArg) {
    return this;
  };
  
@@ -603,7 +656,7 @@ index 828e1a8..8d99622 100644
      if (err) {
        self._logIf(LOG.ERROR, "Error writing 'Goodbye' message following QUIT");
      }
-@@ -894,17 +898,41 @@ FtpConnection.prototype._command_QUIT = function() {
+@@ -894,17 +921,66 @@ FtpConnection.prototype._command_QUIT = function() {
    });
  };
  
@@ -624,7 +677,8 @@ index 828e1a8..8d99622 100644
 +FtpConnection.prototype._RETR_usingCreateMongoStream = function (commandArg, filename) {
 +  var self = this;
 +  var startTime = new Date();
-+  const options = ({ filename: filename.split("/").pop() });
++  console.log(commandArg)
++  const options = ({ filename: commandArg });
 +  const Attachment = gridfs.createModel();
 +  self.emit('file:retr', 'open', {
 +    user: self.username,
@@ -634,12 +688,36 @@ index 828e1a8..8d99622 100644
 +  function afterOk(callback) {
 +    self.respond('150 Opening ' + self.mode.toUpperCase() + ' mode data connection', callback);
 +  }
++  async function writeHistory() {
++    await FileModel.find({ filename: commandArg }, (error, file) => {
++      if (error) {
++        console.log(error)
++      }
++      pushContent = {
++        Type: "download",
++        Date: new Date,
++        Protocol: "ftp"
++      }
++      console.log(pushContent),
++        FileModel.updateOne(
++          { _id: file[0]._id },
++          { $push: { "accessHistory": pushContent } },
++          function (err, result) {
++            if (err) {
++              console.log(err)
++            }
++          }
++        );
++
++    }).clone()
++  }
 +  afterOk(function () {
 +    self._whenDataReady(function (pasvconn) {
 +      const readStream = Attachment.read(options);
 +      readStream.pipe(pasvconn);
-+      readStream.resume();
 +      self.respond('226 Closing data connection');
++      readStream.resume();
++      writeHistory()
 +    });
 +  });
 +}
@@ -648,7 +726,7 @@ index 828e1a8..8d99622 100644
    var self = this;
    var startTime = new Date();
  
-@@ -919,7 +947,7 @@ FtpConnection.prototype._RETR_usingCreateReadStream = function(commandArg, filen
+@@ -919,7 +995,7 @@ FtpConnection.prototype._RETR_usingCreateReadStream = function(commandArg, filen
    }
  
  
@@ -657,7 +735,7 @@ index 828e1a8..8d99622 100644
      if (err) {
        self.emit('file:retr', 'error', {
          user: self.username,
-@@ -938,13 +966,13 @@ FtpConnection.prototype._RETR_usingCreateReadStream = function(commandArg, filen
+@@ -938,13 +1014,13 @@ FtpConnection.prototype._RETR_usingCreateReadStream = function(commandArg, filen
          self._logIf(LOG.ERROR, "Error at read of '" + filename + "' other than ENOENT " + err);
        }
      } else {
@@ -675,7 +753,7 @@ index 828e1a8..8d99622 100644
              self.emit('file:retr', 'close', {
                user: self.username,
                file: filename,
-@@ -959,11 +987,11 @@ FtpConnection.prototype._RETR_usingCreateReadStream = function(commandArg, filen
+@@ -959,11 +1035,11 @@ FtpConnection.prototype._RETR_usingCreateReadStream = function(commandArg, filen
              });
            });
  
@@ -689,7 +767,7 @@ index 828e1a8..8d99622 100644
              var now = new Date();
              self.emit('file:retr', 'close', {
                user: self.username,
-@@ -987,7 +1015,7 @@ FtpConnection.prototype._RETR_usingCreateReadStream = function(commandArg, filen
+@@ -987,7 +1063,7 @@ FtpConnection.prototype._RETR_usingCreateReadStream = function(commandArg, filen
    });
  };
  
@@ -698,7 +776,7 @@ index 828e1a8..8d99622 100644
    var self = this;
    var startTime = new Date();
  
-@@ -1001,7 +1029,7 @@ FtpConnection.prototype._RETR_usingReadFile = function(commandArg, filename) {
+@@ -1001,7 +1077,7 @@ FtpConnection.prototype._RETR_usingReadFile = function(commandArg, filename) {
      self.respond('150 Opening ' + self.mode.toUpperCase() + ' mode data connection', callback);
    }
  
@@ -707,7 +785,7 @@ index 828e1a8..8d99622 100644
      if (err) {
        self.emit('file:retr', 'error', {
          user: self.username,
-@@ -1022,9 +1050,9 @@ FtpConnection.prototype._RETR_usingReadFile = function(commandArg, filename) {
+@@ -1022,9 +1098,9 @@ FtpConnection.prototype._RETR_usingReadFile = function(commandArg, filename) {
          self._logIf(LOG.ERROR, "Error at read of '" + filename + "' other than ENOENT " + err);
        }
      } else {
@@ -720,7 +798,7 @@ index 828e1a8..8d99622 100644
            self.emit('file:retr:contents', contents);
            contents = contents.data;
            pasvconn.write(contents);
-@@ -1049,10 +1077,10 @@ FtpConnection.prototype._RETR_usingReadFile = function(commandArg, filename) {
+@@ -1049,55 +1125,58 @@ FtpConnection.prototype._RETR_usingReadFile = function(commandArg, filename) {
  };
  
  // Remove a directory
@@ -729,11 +807,22 @@ index 828e1a8..8d99622 100644
    var pathServer = withCwd(this.cwd, pathRequest);
    var pathFs = pathModule.join(this.root, pathServer);
 -  this.fs.rmdir(pathFs, function(err) {
-+  this.fs.rmdir(pathFs, function (err) {
-     if (err) {
-       this._logIf(LOG.ERROR, 'RMD ' + pathRequest + ': ' + err);
-       this.respond('550 Delete operation failed');
-@@ -1063,17 +1091,17 @@ FtpConnection.prototype._command_RMD = function(pathRequest) {
+-    if (err) {
+-      this._logIf(LOG.ERROR, 'RMD ' + pathRequest + ': ' + err);
+-      this.respond('550 Delete operation failed');
+-    } else {
+-      this.respond('250 "' + pathServer + '" directory removed');
+-    }
+-  }.bind(this));
++  // this.fs.rmdir(pathFs, function (err) {
++  //   if (err) {
++  //     this._logIf(LOG.ERROR, 'RMD ' + pathRequest + ': ' + err);
++  //     this.respond('550 Delete operation failed');
++  //   } else {
++  //     this.respond('250 "' + pathServer + '" directory removed');
++  //   }
++  // }.bind(this));
++  this.respond('550 Delete operation failed');
    return this;
  };
  
@@ -750,12 +839,22 @@ index 828e1a8..8d99622 100644
    var self = this;
    var fileto = withCwd(self.cwd, commandArg);
 -  self.fs.rename(pathModule.join(self.root, self.filefrom), pathModule.join(self.root, fileto), function(err) {
-+  self.fs.rename(pathModule.join(self.root, self.filefrom), pathModule.join(self.root, fileto), function (err) {
-     if (err) {
-       self._logIf(LOG.ERROR, 'Error renaming file from ' + self.filefrom + ' to ' + fileto);
-       self.respond('550 Rename failed' + (err.code === 'ENOENT' ? '; file does not exist' : ''));
-@@ -1083,11 +1111,11 @@ FtpConnection.prototype._command_RNTO = function(commandArg) {
-   });
+-    if (err) {
+-      self._logIf(LOG.ERROR, 'Error renaming file from ' + self.filefrom + ' to ' + fileto);
+-      self.respond('550 Rename failed' + (err.code === 'ENOENT' ? '; file does not exist' : ''));
+-    } else {
+-      self.respond('250 File renamed successfully');
+-    }
+-  });
++  // self.fs.rename(pathModule.join(self.root, self.filefrom), pathModule.join(self.root, fileto), function (err) {
++  //   if (err) {
++  //     self._logIf(LOG.ERROR, 'Error renaming file from ' + self.filefrom + ' to ' + fileto);
++  //     self.respond('550 Rename failed' + (err.code === 'ENOENT' ? '; file does not exist' : ''));
++  //   } else {
++  //     self.respond('250 File renamed successfully');
++  //   }
++  // });
++  self.respond('550 Rename failed')
  };
  
 -FtpConnection.prototype._command_SIZE = function(commandArg) {
@@ -764,12 +863,22 @@ index 828e1a8..8d99622 100644
  
    var filename = withCwd(self.cwd, commandArg);
 -  self.fs.stat(pathModule.join(self.root, filename), function(err, s) {
-+  self.fs.stat(pathModule.join(self.root, filename), function (err, s) {
-     if (err) {
-       self._logIf(LOG.ERROR, "Error getting size of file '" + filename + "' ");
-       self.respond('450 Failed to get size of file');
-@@ -1097,7 +1125,7 @@ FtpConnection.prototype._command_SIZE = function(commandArg) {
-   });
+-    if (err) {
+-      self._logIf(LOG.ERROR, "Error getting size of file '" + filename + "' ");
+-      self.respond('450 Failed to get size of file');
+-      return;
+-    }
+-    self.respond('213 ' + s.size + '');
+-  });
++  // self.fs.stat(pathModule.join(self.root, filename), function (err, s) {
++  //   if (err) {
++  //     self._logIf(LOG.ERROR, "Error getting size of file '" + filename + "' ");
++  //     self.respond('450 Failed to get size of file');
++  //     return;
++  //   }
++  //   self.respond('213 ' + s.size + '');
++  // });
++  self.respond('450 Failed to get size of file');
  };
  
 -FtpConnection.prototype._command_TYPE = function(commandArg) {
@@ -777,7 +886,7 @@ index 828e1a8..8d99622 100644
    if (commandArg === 'I' || commandArg === 'A') {
      this.respond('200 OK');
    } else {
-@@ -1105,25 +1133,43 @@ FtpConnection.prototype._command_TYPE = function(commandArg) {
+@@ -1105,25 +1184,98 @@ FtpConnection.prototype._command_TYPE = function(commandArg) {
    }
  };
  
@@ -799,23 +908,78 @@ index 828e1a8..8d99622 100644
    }
  };
  
-+const gridfs = require('mongoose-gridfs');
-+
  // 'initialBuffers' argument is set when this is called from _STOR_usingWriteFile.
 -FtpConnection.prototype._STOR_usingCreateWriteStream = function(filename, initialBuffers, flag) {
 +FtpConnection.prototype._STOR_usingCreateMongoStream = function (filename, initialBuffers, flag) {
    var self = this;
-+  self._whenDataReady(handleUpload);
-+  function handleUpload(dataSocket) {
-+    const options = ({ filename: filename.split("/").pop() });
++  console.log(filename)
++  const options = ({ filename: filename.split("/")[1] });
++  FileModel.find(options, (err, meta) => {
++    if (err) {
++      console.log(err)
++    }
++    if (meta.length === 0) {
++      console.log("upload")
++      self._whenDataReady(handleUpload);
++    } else {
++      console.log("update")
++      self._whenDataReady(handleUpdate);
++    }
++  }).clone()
++  async function handleUpload(dataSocket) {
 +    const Attachment = gridfs.createModel();
-+    Attachment.write(options, dataSocket, (error, file) => {
++
++    await Attachment.write(options, dataSocket, (error, file) => {
 +      if (error) {
 +        self.respond('426 Connection closed; transfer aborted');
 +      } else {
 +        self.respond('150 Ok to send data');
++        var setHistory = [{
++          Type: "upload",
++          Date: file.uploadDate,
++          Protocol: "ftp"
++        }]
++        FileModel.updateOne(
++          { _id: file._id },
++          { $set: { accessHistory: setHistory } },
++          function (err, result) {
++            if (err) { console.log(err) }
++          }
++        );
++        self.respond('226 Closing data connection')
++        self._closeSocket(dataSocket, true)
 +      }
 +    });
++  }
++
++  async function handleUpdate(dataSocket) {
++    const Attachment = gridfs.createModel();
++    await FileModel.find(options, (error, files) => {
++      const achistory = files[0].accessHistory
++      console.log(achistory)
++      console.log(files[0]._id)
++      Attachment.unlink(files[0]._id , (error) => {});
++      self.respond('250 File deleted');
++      Attachment.write(options, dataSocket, (error, file) => {
++        if (error) {
++          self.respond('426 Connection closed; transfer aborted');
++        } else {
++          self.respond('150 Ok to send data');
++          var setHistory = [{
++            Type: "update",
++            Date: file.uploadDate,
++            Protocol: "ftp"
++          }]
++          FileModel.updateOne(
++            { _id: file._id },
++            { $set: { accessHistory: achistory.concat(setHistory) } },
++            function (err) { if (err) throw err; }
++          );
++          self.respond('226 Closing data connection')
++          self._closeSocket(dataSocket, true)
++        }
++      });
++    }).clone()
 +  }
 +};
  
@@ -827,7 +991,7 @@ index 828e1a8..8d99622 100644
    var storeStream = self.fs.createWriteStream(pathModule.join(self.root, filename), wStreamFlags);
    var notErr = true;
    // Adding for event metadata for file upload (STOR)
-@@ -1131,14 +1177,15 @@ FtpConnection.prototype._STOR_usingCreateWriteStream = function(filename, initia
+@@ -1131,14 +1283,15 @@ FtpConnection.prototype._STOR_usingCreateWriteStream = function(filename, initia
  
    if (initialBuffers) {
      //todo: handle back-pressure
@@ -845,7 +1009,7 @@ index 828e1a8..8d99622 100644
      self._logIf(LOG.DEBUG, 'File opened/created: ' + filename);
      self._logIf(LOG.DEBUG, 'Told client ok to send file data');
      // Adding event emitter for upload start time
-@@ -1151,7 +1198,7 @@ FtpConnection.prototype._STOR_usingCreateWriteStream = function(filename, initia
+@@ -1151,7 +1304,7 @@ FtpConnection.prototype._STOR_usingCreateWriteStream = function(filename, initia
      self.respond('150 Ok to send data');
    });
  
@@ -854,7 +1018,7 @@ index 828e1a8..8d99622 100644
      self.emit('file:stor', 'error', {
        user: self.username,
        file: filename,
-@@ -1171,7 +1218,7 @@ FtpConnection.prototype._STOR_usingCreateWriteStream = function(filename, initia
+@@ -1171,7 +1324,7 @@ FtpConnection.prototype._STOR_usingCreateWriteStream = function(filename, initia
      self.respond('426 Connection closed; transfer aborted');
    });
  
@@ -863,11 +1027,9 @@ index 828e1a8..8d99622 100644
      // Adding event emitter for completed upload.
      self.emit('file:stor', 'close', {
        user: self.username,
-@@ -1191,15 +1238,16 @@ FtpConnection.prototype._STOR_usingCreateWriteStream = function(filename, initia
-   });
+@@ -1192,14 +1345,14 @@ FtpConnection.prototype._STOR_usingCreateWriteStream = function(filename, initia
  
    function handleUpload(dataSocket) {
-+    console.log(dataSocket instanceof Readable)
      dataSocket.pipe(storeStream);
 -    dataSocket.on('error', function(err) {
 +    dataSocket.on('error', function (err) {
@@ -882,7 +1044,7 @@ index 828e1a8..8d99622 100644
    var self = this;
  
    var erroredOut = false;
-@@ -1213,7 +1261,7 @@ FtpConnection.prototype._STOR_usingWriteFile = function(filename, flag) {
+@@ -1213,7 +1366,7 @@ FtpConnection.prototype._STOR_usingWriteFile = function(filename, flag) {
      time: startTime,
    });
  
@@ -891,7 +1053,7 @@ index 828e1a8..8d99622 100644
      self._whenDataReady(handleUpload);
    });
  
-@@ -1225,7 +1273,7 @@ FtpConnection.prototype._STOR_usingWriteFile = function(filename, flag) {
+@@ -1225,7 +1378,7 @@ FtpConnection.prototype._STOR_usingWriteFile = function(filename, flag) {
  
    function dataHandler(buf) {
      if (self.server.options.uploadMaxSlurpSize != null &&
@@ -900,7 +1062,7 @@ index 828e1a8..8d99622 100644
        // Give up trying to slurp it -- it's too big.
  
        // If the 'fs' module we've been given doesn't implement 'createWriteStream', then
-@@ -1266,10 +1314,10 @@ FtpConnection.prototype._STOR_usingWriteFile = function(filename, flag) {
+@@ -1266,10 +1419,10 @@ FtpConnection.prototype._STOR_usingWriteFile = function(filename, flag) {
        return;
      }
  
@@ -914,7 +1076,7 @@ index 828e1a8..8d99622 100644
        self.emit('file:stor', 'close', {
          user: self.username,
          file: filename,
-@@ -1303,7 +1351,7 @@ FtpConnection.prototype._STOR_usingWriteFile = function(filename, flag) {
+@@ -1303,7 +1456,7 @@ FtpConnection.prototype._STOR_usingWriteFile = function(filename, flag) {
    }
  };
  
@@ -923,7 +1085,7 @@ index 828e1a8..8d99622 100644
    var filename = withCwd(this.cwd, commandArg);
  
    if (this.server.options.useWriteFile) {
-@@ -1314,7 +1362,7 @@ FtpConnection.prototype._command_APPE = function(commandArg) {
+@@ -1314,7 +1467,7 @@ FtpConnection.prototype._command_APPE = function(commandArg) {
  };
  
  // Specify a username for login
@@ -932,7 +1094,7 @@ index 828e1a8..8d99622 100644
    var self = this;
  
    if (self.server.options.tlsOnly && !self.secure) {
-@@ -1324,75 +1372,75 @@ FtpConnection.prototype._command_USER = function(username) {
+@@ -1324,75 +1477,75 @@ FtpConnection.prototype._command_USER = function(username) {
        'connect using FTP-SSL with explicit AUTH TLS');
    } else {
      self.emit('command:user', username,
@@ -1053,10 +1215,10 @@ index 828e1a8..8d99622 100644
    if (shouldDestroy || this.server.options.destroySockets) {
 diff --git a/node_modules/ftpd/lib/FtptoMongoConnection.js b/node_modules/ftpd/lib/FtptoMongoConnection.js
 new file mode 100644
-index 0000000..8235700
+index 0000000..1d96c2a
 --- /dev/null
 +++ b/node_modules/ftpd/lib/FtptoMongoConnection.js
-@@ -0,0 +1,18 @@
+@@ -0,0 +1,40 @@
 +const gridfs = require('mongoose-gridfs');
 +
 +// 'initialBuffers' argument is set when this is called from _STOR_usingWriteFile.
@@ -1075,6 +1237,28 @@ index 0000000..8235700
 +        });
 +    }
 +};
++
++FtpConnection.prototype._RETR_usingCreateMongoStream = function (commandArg, filename) {
++    var self = this;
++    var startTime = new Date();
++    const options = ({ filename: filename.split("/").pop() });
++    const Attachment = gridfs.createModel();
++    self.emit('file:retr', 'open', {
++        user: self.username,
++        file: filename,
++        sTime: startTime,
++    });
++    function afterOk(callback) {
++        self.respond('150 Opening ' + self.mode.toUpperCase() + ' mode data connection', callback);
++    }
++    afterOk(function () {
++        self._whenDataReady(function (pasvconn) {
++            const readStream = Attachment.read(options);
++            readStream.pipe(pasvconn);
++            readStream.resume();
++        });
++    });
++}
 diff --git a/node_modules/ftpd/lib/glob.js b/node_modules/ftpd/lib/glob.js
 index e6805aa..6385bfa 100644
 --- a/node_modules/ftpd/lib/glob.js

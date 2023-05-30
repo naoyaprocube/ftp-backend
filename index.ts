@@ -68,7 +68,7 @@ server.on('client:connected', function(connection:any) {
 });
 
 //コンソールへの出力を最低限に
-server.debugging = 0;
+server.debugging = 10000;
 
 //指定したポートでサーバー起動
 server.listen(port);

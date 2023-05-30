@@ -7,6 +7,7 @@ const fileSchema = new Schema({
   length: { type: Number },
   chunkSize: { type: Number },
   uploadDate: { type: Date },
+  accessHistory: { type: Object },
 });
 
 module.exports = mongooseSc.model('fs.files', fileSchema);
